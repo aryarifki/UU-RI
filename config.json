@@ -1,11 +1,20 @@
 {
   "regulation_types": {
     "UU": "Undang-Undang",
-    "PERPPU": "Peraturan Pengganti Undang-Undang", 
-    "PP": "Peraturan Pemerintah",
+    "PERPPU": "Peraturan Pemerintah Pengganti Undang-Undang",
+    "PP": "Peraturan Pemerintah", 
     "PERPRES": "Peraturan Presiden",
     "PERMEN": "Peraturan Menteri",
     "PERDA": "Peraturan Daerah",
+    "PERBAN": "Peraturan Bank Indonesia",
+    "TAPMPR": "Ketetapan MPR",
+    "PERMENKUMHAM": "Peraturan Menteri Hukum dan HAM",
+    "PERMENDAGRI": "Peraturan Menteri Dalam Negeri",
+    "PERMENKEU": "Peraturan Menteri Keuangan",
+    "PERMENKES": "Peraturan Menteri Kesehatan",
+    "PERMENDIKBUD": "Peraturan Menteri Pendidikan dan Kebudayaan",
+    "PERMENAKER": "Peraturan Menteri Ketenagakerjaan",
+    "PERMENAG": "Peraturan Menteri Agama",
     "KEPRES": "Keputusan Presiden",
     "INPRES": "Instruksi Presiden"
   },
@@ -15,11 +24,26 @@
     "PP": "3", 
     "PERPRES": "4",
     "PERMEN": "5",
-    "PERDA": "6"
+    "PERDA": "6",
+    "PERBAN": "7",
+    "TAPMPR": "8",
+    "PERMENKUMHAM": "9",
+    "PERMENDAGRI": "10",
+    "PERMENKEU": "11",
+    "PERMENKES": "12",
+    "PERMENDIKBUD": "13",
+    "PERMENAKER": "14",
+    "PERMENAG": "15"
   },
-  "base_dir": "Peraturan-RI",
+  "base_dir": "Peraturan-RI-Complete",
   "demo_mode": false,
-  "max_concurrent": 5,
+  "max_concurrent": 15,
+  "request_delay": 0.8,
+  "retry_attempts": 3,
+  "years_range": [1945, 1946, 1947, 1948, 1949, 1950, 1951, 1952, 1953, 1954, 1955, 1956, 1957, 1958, 1959, 1960, 1961, 1962, 1963, 1964, 1965, 1966, 1967, 1968, 1969, 1970, 1971, 1972, 1973, 1974, 1975, 1976, 1977, 1978, 1979, 1980, 1981, 1982, 1983, 1984, 1985, 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
+  "download_all_types": true,
+  "follow_pagination": true,
+  "crawl_depth": 5,
   "batch_settings": {
     "years_to_scrape": ["2020", "2021", "2022", "2023", "2024", "2025"],
     "priority_types": ["UU", "PERPPU", "PP", "PERPRES", "PERMEN"],
@@ -40,7 +64,7 @@
     "prioritize_content_disposition": true,
     "minimal_filename_cleaning": true,
     "create_organized_folders": true,
-    "folder_pattern": "/Peraturan-RI/{TYPE}/{YEAR}/Nomor {NUMBER}/",
+    "folder_pattern": "/Peraturan-RI-Complete/{TYPE}/{YEAR}/Nomor {NUMBER}/",
     "allowed_file_types": [".pdf", ".doc", ".docx", ".txt"],
     "max_file_size_mb": 100,
     "skip_existing_files": true
@@ -48,14 +72,14 @@
   "search_settings": {
     "default_status": "Berlaku",
     "url_encoding": true,
-    "active_regulations_only": true,
+    "active_regulations_only": false,
     "search_params": {
       "tentang": "",
       "nomor": "",
       "tahun": "",
       "jenis_peraturan_id": "",
       "pemrakarsa_id": "",
-      "status": "Berlaku"
+      "status": ""
     }
   }
 }
