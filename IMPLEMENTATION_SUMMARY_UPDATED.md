@@ -1,5 +1,40 @@
 # Advanced Indonesian Legal Documents Scraper - Implementation Summary
 
+## 🆕 **FITUR BARU: Direct PDF URL Support** ✅
+
+### **Dukungan Download Direct PDF URLs**
+- **URL yang didukung**: `https://peraturan.go.id/files/uu-no-1-tahun-2025.pdf`
+- **Validasi URL otomatis**: Deteksi dan validasi URL direct PDF dari peraturan.go.id
+- **Multiple download patterns**: 4 cara berbeda untuk download
+- **Organized folder structure**: Struktur folder otomatis berdasarkan jenis/tahun/nomor
+- **Enhanced error handling**: Retry mechanism dengan exponential backoff
+- **Concurrent downloads**: Support download multiple file bersamaan
+
+### **New Methods dan Functions:**
+1. **`is_direct_pdf_url(url)`** - Validasi URL direct PDF
+2. **`extract_filename_from_url(url)`** - Ekstrak nama file bersih dari URL
+3. **`parse_regulation_info_from_url(url)`** - Parse info peraturan dari URL
+4. **`download_direct_pdf(url)`** - Download single direct PDF
+5. **`download_multiple_direct_pdfs(urls)`** - Download multiple PDFs concurrently
+6. **`download_from_direct_urls(urls)`** - Convenience method
+7. **`download_direct_pdfs(urls)`** - Standalone function
+8. **Enhanced `scrape_regulations(direct_urls=...)`** - Integrated ke main method
+
+### **Usage Patterns:**
+```python
+# 1. Single URL
+result = await scraper.download_direct_pdf(url)
+
+# 2. Multiple URLs  
+result = await scraper.download_from_direct_urls(urls)
+
+# 3. Via main scraper
+result = await scraper.scrape_regulations(direct_urls=urls)
+
+# 4. Standalone function
+result = await download_direct_pdfs(urls)
+```
+
 ## Fitur-Fitur Utama yang Diimplementasikan
 
 ### 1. **Preservasi Nama File Asli** ✅
@@ -113,6 +148,16 @@ Peraturan-RI/UU/2024/Nomor 1/
 
 ## Keunggulan Implementasi
 
+### **🆕 Direct PDF URL Support:**
+1. **URL validation** - Validasi otomatis untuk URL peraturan.go.id
+2. **Smart filename extraction** - Ekstraksi nama file yang readable
+3. **Regulation parsing** - Parse type, year, number dari URL
+4. **Multiple download methods** - 4 cara berbeda untuk download
+5. **Concurrent processing** - Download multiple files bersamaan
+6. **Retry mechanism** - Exponential backoff untuk error handling
+7. **Integration** - Terintegrasi dengan scraper existing
+
+### **Original Features:**
 1. **Nama file autentik** - Sesuai dengan yang ada di website
 2. **Organisasi rapi** - Folder terstruktur berdasarkan jenis/tahun/nomor
 3. **Filter akurat** - Hanya peraturan yang masih berlaku
@@ -122,6 +167,26 @@ Peraturan-RI/UU/2024/Nomor 1/
 7. **Logging detail** - Monitoring proses yang jelas
 
 ## Testing
+
+### **Test Scripts Baru:**
+- `test_direct_urls.py` - Comprehensive testing untuk direct URL functionality
+- `test_demo_mode.py` - Testing demo mode dan non-network functions
+- `direct_url_examples.py` - Usage examples dan demonstrasi
+
+### **Testing Commands:**
+```bash
+# Test direct URL functionality
+python test_direct_urls.py
+
+# Test demo mode
+python test_demo_mode.py
+
+# Run usage examples
+python direct_url_examples.py
+
+# Test main script with new features
+python advanced_peraturan_scraper.py
+```
 
 Jalankan dengan demo mode terlebih dahulu:
 ```bash

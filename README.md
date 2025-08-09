@@ -4,6 +4,16 @@ Scraper canggih untuk mengunduh dokumen peraturan perundang-undangan Indonesia d
 
 ## ✨ Fitur Utama
 
+### 🆕 **BARU: Dukungan Direct PDF URL** 
+- **Download langsung dari URL PDF**: Mendukung link direct seperti `https://peraturan.go.id/files/uu-no-1-tahun-2025.pdf`
+- **Deteksi URL otomatis**: Validasi dan parsing URL direct PDF
+- **Multiple download methods**: Single, batch, atau via scraper utama
+- **Retry mechanism**: Mechanism percobaan ulang dengan exponential backoff
+- **Contoh URL yang didukung**:
+  - `https://peraturan.go.id/files/uud-no-1-tahun-2025.pdf`
+  - `https://peraturan.go.id/files/uu-no-2-tahun-2024.pdf`
+  - `https://peraturan.go.id/files/pp-no-15-tahun-2024.pdf`
+
 ### 🎯 Nama File Asli
 - **Ekstraksi dari Content-Disposition header**: Mendapatkan nama file asli dari server
 - **Prioritas nama asli**: Menggunakan nama dari server dibanding judul HTML  
@@ -55,6 +65,43 @@ Secara default hanya mengunduh peraturan yang masih berlaku (aktif).
 | PERMENKUMHAM | Peraturan Menteri Hukum dan HAM |
 
 ## 🚀 Cara Penggunaan
+
+### 🆕 **BARU: Download Direct PDF URL**
+
+#### Download Single URL
+```python
+from advanced_peraturan_scraper import AdvancedPeraturanScraper
+
+async with AdvancedPeraturanScraper() as scraper:
+    result = await scraper.download_direct_pdf(
+        "https://peraturan.go.id/files/uu-no-1-tahun-2025.pdf"
+    )
+```
+
+#### Download Multiple URLs
+```python
+urls = [
+    "https://peraturan.go.id/files/uud-no-1-tahun-2025.pdf",
+    "https://peraturan.go.id/files/uu-no-2-tahun-2024.pdf",
+    "https://peraturan.go.id/files/pp-no-15-tahun-2024.pdf"
+]
+
+async with AdvancedPeraturanScraper() as scraper:
+    result = await scraper.download_from_direct_urls(urls)
+```
+
+#### Via Main Scraper Method
+```python
+async with AdvancedPeraturanScraper() as scraper:
+    result = await scraper.scrape_regulations(direct_urls=urls)
+```
+
+#### Standalone Function
+```python
+from advanced_peraturan_scraper import download_direct_pdfs
+
+result = await download_direct_pdfs(urls)
+```
 
 ### 1. Mode Interaktif (Rekomendasi untuk Pemula)
 ```bash
@@ -160,6 +207,23 @@ python run_all_advanced.py 2024 berlaku
 
 ## 🔧 Fitur Lanjutan
 
+### 🆕 Direct PDF URL Support
+```python
+from advanced_peraturan_scraper import AdvancedPeraturanScraper
+
+async with AdvancedPeraturanScraper() as scraper:
+    # Validasi URL
+    is_valid = scraper.is_direct_pdf_url("https://peraturan.go.id/files/uu-no-1-tahun-2025.pdf")
+    
+    # Ekstrak info peraturan dari URL
+    info = scraper.parse_regulation_info_from_url(url)
+    # Returns: {'type': 'UU', 'year': '2025', 'number': '1', 'filename': '...'}
+    
+    # Ekstrak nama file yang bersih
+    filename = scraper.extract_filename_from_url(url)
+    # Returns: "UU No. 1 Tahun 2025.pdf"
+```
+
 ### Penggunaan Langsung dalam Kode Python
 ```python
 from advanced_peraturan_scraper import run_advanced_scraper
@@ -225,6 +289,22 @@ Log mencakup:
 - Consider bandwidth usage
 
 ## 🔍 Troubleshooting
+
+### 🆕 **Direct PDF URL Issues**
+```bash
+# Test URL validation
+python test_direct_urls.py
+
+# Run usage examples  
+python direct_url_examples.py
+
+# Check if URL is valid direct PDF
+python -c "
+from advanced_peraturan_scraper import AdvancedPeraturanScraper
+scraper = AdvancedPeraturanScraper()
+print(scraper.is_direct_pdf_url('https://peraturan.go.id/files/uu-no-1-tahun-2025.pdf'))
+"
+```
 
 ### Issue: "Connection timeout"
 ```bash
