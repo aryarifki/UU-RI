@@ -1,0 +1,61 @@
+{
+  "regulation_types": {
+    "UU": "Undang-Undang",
+    "PERPPU": "Peraturan Pengganti Undang-Undang", 
+    "PP": "Peraturan Pemerintah",
+    "PERPRES": "Peraturan Presiden",
+    "PERMEN": "Peraturan Menteri",
+    "PERDA": "Peraturan Daerah",
+    "KEPRES": "Keputusan Presiden",
+    "INPRES": "Instruksi Presiden"
+  },
+  "regulation_type_ids": {
+    "UU": "1",
+    "PERPPU": "2",
+    "PP": "3", 
+    "PERPRES": "4",
+    "PERMEN": "5",
+    "PERDA": "6"
+  },
+  "base_dir": "Peraturan-RI",
+  "demo_mode": false,
+  "max_concurrent": 5,
+  "batch_settings": {
+    "years_to_scrape": ["2020", "2021", "2022", "2023", "2024", "2025"],
+    "priority_types": ["UU", "PERPPU", "PP", "PERPRES", "PERMEN"],
+    "max_results_per_type": 50,
+    "status_filter": "Berlaku",
+    "delay_between_types": 3,
+    "delay_between_requests": 2
+  },
+  "url_settings": {
+    "base_url": "https://peraturan.go.id",
+    "search_endpoint": "/cari",
+    "search_format": "PeraturanSearch%5Btentang%5D=&PeraturanSearch%5Bnomor%5D={nomor}&PeraturanSearch%5Btahun%5D={tahun}&PeraturanSearch%5Bjenis_peraturan_id%5D={jenis}&PeraturanSearch%5Bpemrakarsa_id%5D=&PeraturanSearch%5Bstatus%5D=Berlaku",
+    "timeout_seconds": 300,
+    "max_retries": 3
+  },
+  "download_settings": {
+    "preserve_original_filename": true,
+    "prioritize_content_disposition": true,
+    "minimal_filename_cleaning": true,
+    "create_organized_folders": true,
+    "folder_pattern": "/Peraturan-RI/{TYPE}/{YEAR}/Nomor {NUMBER}/",
+    "allowed_file_types": [".pdf", ".doc", ".docx", ".txt"],
+    "max_file_size_mb": 100,
+    "skip_existing_files": true
+  },
+  "search_settings": {
+    "default_status": "Berlaku",
+    "url_encoding": true,
+    "active_regulations_only": true,
+    "search_params": {
+      "tentang": "",
+      "nomor": "",
+      "tahun": "",
+      "jenis_peraturan_id": "",
+      "pemrakarsa_id": "",
+      "status": "Berlaku"
+    }
+  }
+}
