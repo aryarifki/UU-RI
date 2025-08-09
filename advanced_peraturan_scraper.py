@@ -297,6 +297,163 @@ class AdvancedPeraturanScraper:
         else:
             return 'unknown'
     
+    async def download_direct_pdf(self, pdf_url: str, max_retries: int = 3) -> Dict:
+        """
+        Download a direct PDF file from peraturan.go.id with enhanced error handling
+        and progress tracking.
+        
+        Args:
+            pdf_url: Direct URL to PDF file 
+            max_retries: Maximum number of retry attempts
+            
+        Returns:
+            Dict with download result information
+        """
+        if not self.is_direct_pdf_url(pdf_url):
+            return {
+                'success': False,
+                'error': 'URL is not a valid direct PDF URL from peraturan.go.id',
+                'url': pdf_url
+            }
+        
+        # Parse regulation info from URL
+        reg_info = self.parse_regulation_info_from_url(pdf_url)
+        
+        # Create folder structure for direct download
+        folder_path = self.create_folder_structure(
+            reg_info['type'], 
+            reg_info['year'], 
+            reg_info['number']
+        )
+        
+        # Extract clean filename
+        clean_filename = self.extract_filename_from_url(pdf_url)
+        file_path = folder_path / clean_filename
+        
+        # Check if file already exists
+        if file_path.exists() and self.config.get("download_settings", {}).get("skip_existing_files", True):
+            logger.info(f"File already exists, skipping: {clean_filename}")
+            return {
+                'success': True,
+                'skipped': True,
+                'file_path': str(file_path),
+                'url': pdf_url,
+                'filename': clean_filename
+            }
+        
+        # Attempt download with retry mechanism
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Downloading direct PDF (attempt {attempt + 1}/{max_retries}): {pdf_url}")
+                
+                if self.config.get("demo_mode", True):
+                    logger.info("DEMO MODE: Would download file but skipping actual download")
+                    return {
+                        'success': True,
+                        'demo_mode': True,
+                        'file_path': str(file_path),
+                        'url': pdf_url,
+                        'filename': clean_filename
+                    }
+                
+                async with self.session.get(pdf_url) as response:
+                    if response.status != 200:
+                        logger.warning(f"HTTP {response.status} error for attempt {attempt + 1}: {pdf_url}")
+                        if attempt == max_retries - 1:  # Last attempt
+                            return {
+                                'success': False,
+                                'error': f'HTTP {response.status} error after {max_retries} attempts',
+                                'url': pdf_url
+                            }
+                        await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                        continue
+                    
+                    # Get final filename (check Content-Disposition if available)
+                    content_disposition = response.headers.get('Content-Disposition', '')
+                    original_filename = self.extract_filename_from_content_disposition(content_disposition)
+                    
+                    if original_filename:
+                        logger.info(f"Using original server filename: {original_filename}")
+                        final_filename = self.clean_filename(original_filename, minimal_cleaning=True)
+                        file_path = folder_path / final_filename
+                    else:
+                        final_filename = clean_filename
+                    
+                    # Download content
+                    content = await response.read()
+                    
+                    # Validate content (basic check for PDF)
+                    if len(content) < 1024:  # Very small file, likely error
+                        logger.warning(f"Downloaded content too small ({len(content)} bytes), possibly error page")
+                        if attempt == max_retries - 1:
+                            return {
+                                'success': False,
+                                'error': f'Downloaded content too small after {max_retries} attempts',
+                                'url': pdf_url
+                            }
+                        await asyncio.sleep(2 ** attempt)
+                        continue
+                    
+                    # Check if content looks like PDF
+                    if not content.startswith(b'%PDF'):
+                        logger.warning(f"Downloaded content doesn't appear to be a PDF file")
+                        if attempt == max_retries - 1:
+                            return {
+                                'success': False,
+                                'error': f'Downloaded content is not a valid PDF after {max_retries} attempts',
+                                'url': pdf_url
+                            }
+                        await asyncio.sleep(2 ** attempt)
+                        continue
+                    
+                    # Save file
+                    with open(file_path, 'wb') as f:
+                        f.write(content)
+                    
+                    logger.info(f"Successfully downloaded direct PDF: {final_filename}")
+                    
+                    # Update statistics
+                    self.success_count += 1
+                    self.download_count += 1
+                    self.downloaded_files.append({
+                        'original_url': pdf_url,
+                        'saved_path': str(file_path),
+                        'original_filename': original_filename or clean_filename,
+                        'final_filename': final_filename,
+                        'size_bytes': len(content),
+                        'regulation_type': reg_info['type'],
+                        'year': reg_info['year'],
+                        'number': reg_info['number'],
+                        'direct_download': True
+                    })
+                    
+                    return {
+                        'success': True,
+                        'file_path': str(file_path),
+                        'url': pdf_url,
+                        'filename': final_filename,
+                        'size_bytes': len(content),
+                        'regulation_info': reg_info
+                    }
+                    
+            except Exception as e:
+                logger.error(f"Error downloading direct PDF (attempt {attempt + 1}): {e}")
+                if attempt == max_retries - 1:  # Last attempt
+                    self.error_count += 1
+                    return {
+                        'success': False,
+                        'error': f'Download failed after {max_retries} attempts: {str(e)}',
+                        'url': pdf_url
+                    }
+                await asyncio.sleep(2 ** attempt)  # Exponential backoff
+        
+        # Should not reach here, but just in case
+        return {
+            'success': False,
+            'error': 'Unexpected error in download process',
+            'url': pdf_url
+        }
+
     async def download_file(self, download_url: str, folder_path: Path, 
                           regulation_info: Dict) -> bool:
         """Download a file and save it with original filename from Content-Disposition"""
@@ -377,6 +534,110 @@ class AdvancedPeraturanScraper:
         }
         return content_type_map.get(content_type.lower(), '.pdf')  # Default to PDF
     
+    def is_direct_pdf_url(self, url: str) -> bool:
+        """
+        Check if URL is a direct PDF link from peraturan.go.id
+        Examples:
+        - https://peraturan.go.id/files/uud-no-1-tahun-2025.pdf
+        - https://peraturan.go.id/files/uu-no-2-tahun-2024.pdf
+        """
+        if not url or not isinstance(url, str):
+            return False
+        
+        url_lower = url.lower()
+        return (
+            'peraturan.go.id' in url_lower and
+            '/files/' in url_lower and
+            url_lower.endswith('.pdf')
+        )
+    
+    def extract_filename_from_url(self, url: str) -> str:
+        """
+        Extract filename from direct PDF URL and clean it for better readability
+        Examples:
+        - 'uud-no-1-tahun-2025.pdf' -> 'UUD No. 1 Tahun 2025.pdf'
+        - 'uu-no-2-tahun-2024.pdf' -> 'UU No. 2 Tahun 2024.pdf'
+        """
+        try:
+            parsed_url = urlparse(url)
+            filename = os.path.basename(parsed_url.path)
+            
+            if not filename or not filename.endswith('.pdf'):
+                return 'document.pdf'
+            
+            # Remove .pdf extension for processing
+            name_without_ext = filename[:-4]
+            
+            # Convert dashes to spaces and capitalize words
+            cleaned_name = name_without_ext.replace('-', ' ').title()
+            
+            # Fix common abbreviations
+            cleaned_name = re.sub(r'\bUu\b', 'UU', cleaned_name)
+            cleaned_name = re.sub(r'\bUud\b', 'UUD', cleaned_name)
+            cleaned_name = re.sub(r'\bPp\b', 'PP', cleaned_name)
+            cleaned_name = re.sub(r'\bPerpres\b', 'Perpres', cleaned_name)
+            cleaned_name = re.sub(r'\bPermen\b', 'Permen', cleaned_name)
+            cleaned_name = re.sub(r'\bNo\b', 'No.', cleaned_name)
+            
+            return f"{cleaned_name}.pdf"
+            
+        except Exception as e:
+            logger.warning(f"Error extracting filename from URL {url}: {e}")
+            return 'document.pdf'
+    
+    def parse_regulation_info_from_url(self, url: str) -> Dict[str, str]:
+        """
+        Parse regulation information from direct PDF URL
+        Returns dict with type, year, number if possible to extract
+        """
+        try:
+            filename = os.path.basename(urlparse(url).path)
+            name_without_ext = filename[:-4] if filename.endswith('.pdf') else filename
+            
+            # Initialize default values
+            reg_type = "Unknown"
+            year = "Unknown"
+            number = "Unknown"
+            
+            # Extract regulation type
+            name_lower = name_without_ext.lower()
+            if name_lower.startswith('uu-'):
+                reg_type = "UU"
+            elif name_lower.startswith('uud-'):
+                reg_type = "UUD"  
+            elif name_lower.startswith('pp-'):
+                reg_type = "PP"
+            elif name_lower.startswith('perpres-'):
+                reg_type = "PERPRES"
+            elif name_lower.startswith('permen-'):
+                reg_type = "PERMEN"
+            
+            # Extract year (4 digits)
+            year_match = re.search(r'tahun-(\d{4})', name_lower)
+            if year_match:
+                year = year_match.group(1)
+            
+            # Extract number
+            number_match = re.search(r'no-(\d+)', name_lower)
+            if number_match:
+                number = number_match.group(1)
+            
+            return {
+                'type': reg_type,
+                'year': year,
+                'number': number,
+                'filename': filename
+            }
+            
+        except Exception as e:
+            logger.warning(f"Error parsing regulation info from URL {url}: {e}")
+            return {
+                'type': "Unknown",
+                'year': "Unknown", 
+                'number': "Unknown",
+                'filename': 'document.pdf'
+            }
+    
     async def scrape_all_active_regulations(self, years: List[str] = None, 
                                           regulation_types: List[str] = None,
                                           max_results_per_search: int = 50) -> Dict:
@@ -440,13 +701,118 @@ class AdvancedPeraturanScraper:
         logger.info(f"Comprehensive scrape completed. Downloaded: {total_downloaded}, Errors: {total_errors}")
         return summary
     
-    async def scrape_regulations(self, regulation_type: str, year: Optional[str] = None,
-                               number: Optional[str] = None, status: str = "Berlaku",
-                               max_results: int = 10) -> Dict:
+    async def download_multiple_direct_pdfs(self, pdf_urls: List[str], 
+                                          max_concurrent: int = None) -> Dict:
         """
-        Main scraping method for individual regulation type/year combinations
+        Download multiple direct PDF URLs concurrently
+        
+        Args:
+            pdf_urls: List of direct PDF URLs
+            max_concurrent: Maximum concurrent downloads (uses config if None)
+            
+        Returns:
+            Dict with summary of all downloads
+        """
+        if not pdf_urls:
+            return {
+                'total_urls': 0,
+                'successful_downloads': 0,
+                'failed_downloads': 0,
+                'skipped_files': 0,
+                'results': []
+            }
+        
+        if max_concurrent is None:
+            max_concurrent = self.config.get("max_concurrent", 5)
+        
+        logger.info(f"Starting download of {len(pdf_urls)} direct PDF files with max {max_concurrent} concurrent downloads")
+        
+        # Create semaphore to limit concurrent downloads
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        async def download_with_semaphore(url):
+            async with semaphore:
+                return await self.download_direct_pdf(url)
+        
+        # Execute downloads
+        tasks = [download_with_semaphore(url) for url in pdf_urls]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Process results
+        successful = 0
+        failed = 0
+        skipped = 0
+        processed_results = []
+        
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"Exception downloading {pdf_urls[i]}: {result}")
+                failed += 1
+                processed_results.append({
+                    'url': pdf_urls[i],
+                    'success': False,
+                    'error': str(result)
+                })
+            elif isinstance(result, dict):
+                processed_results.append(result)
+                if result.get('success', False):
+                    if result.get('skipped', False):
+                        skipped += 1
+                    else:
+                        successful += 1
+                else:
+                    failed += 1
+        
+        summary = {
+            'total_urls': len(pdf_urls),
+            'successful_downloads': successful,
+            'failed_downloads': failed,
+            'skipped_files': skipped,
+            'results': processed_results
+        }
+        
+        logger.info(f"Direct PDF download completed: {successful} successful, {failed} failed, {skipped} skipped")
+        return summary
+
+    async def scrape_regulations(self, regulation_type: str = None, year: Optional[str] = None,
+                               number: Optional[str] = None, status: str = "Berlaku",
+                               max_results: int = 10, direct_urls: List[str] = None) -> Dict:
+        """
+        Main scraping method that can handle both search-based scraping and direct PDF URLs
+        
+        Args:
+            regulation_type: Type of regulation (UU, PP, etc.) - optional if using direct_urls
+            year: Year filter - optional
+            number: Number filter - optional  
+            status: Status filter (Berlaku, etc.)
+            max_results: Maximum results to process
+            direct_urls: List of direct PDF URLs to download instead of searching
+            
+        Returns:
+            Dict with scraping results
         """
         try:
+            # Handle direct URLs if provided
+            if direct_urls:
+                logger.info(f"Processing {len(direct_urls)} direct PDF URLs")
+                direct_result = await self.download_multiple_direct_pdfs(direct_urls)
+                
+                return {
+                    'regulation_type': regulation_type or 'Direct URLs',
+                    'mode': 'direct_urls',
+                    'total_found': len(direct_urls),
+                    'processed': len(direct_urls),
+                    'downloaded': direct_result['successful_downloads'],
+                    'skipped': direct_result['skipped_files'],
+                    'errors': direct_result['failed_downloads'],
+                    'files': self.downloaded_files.copy(),
+                    'direct_results': direct_result
+                }
+            
+            # Original search-based scraping logic
+            if not regulation_type:
+                raise ValueError("regulation_type is required when not using direct_urls")
+                
             logger.info(f"Starting scrape for {regulation_type} regulations")
             
             # Build search URL
@@ -459,6 +825,7 @@ class AdvancedPeraturanScraper:
                 logger.warning("No search results found")
                 return {
                     'regulation_type': regulation_type,
+                    'mode': 'search',
                     'total_found': 0,
                     'processed': 0,
                     'downloaded': 0,
@@ -525,6 +892,7 @@ class AdvancedPeraturanScraper:
             
             summary = {
                 'regulation_type': regulation_type,
+                'mode': 'search',
                 'total_found': len(search_results),
                 'processed': processed_count,
                 'downloaded': downloaded_count,
@@ -538,7 +906,8 @@ class AdvancedPeraturanScraper:
         except Exception as e:
             logger.error(f"Error in scrape_regulations: {e}")
             return {
-                'regulation_type': regulation_type,
+                'regulation_type': regulation_type or 'Unknown',
+                'mode': 'error',
                 'total_found': 0,
                 'processed': 0,
                 'downloaded': 0,
@@ -578,10 +947,64 @@ class AdvancedPeraturanScraper:
             'downloaded_files': len(self.downloaded_files)
         }
 
+    async def download_from_direct_urls(self, urls: List[str]) -> Dict:
+        """
+        Convenience method to download from a list of direct PDF URLs
+        
+        Args:
+            urls: List of direct PDF URLs from peraturan.go.id
+            
+        Returns:
+            Dict with download results
+        """
+        logger.info(f"Starting download from {len(urls)} direct URLs")
+        
+        # Filter valid URLs
+        valid_urls = [url for url in urls if self.is_direct_pdf_url(url)]
+        invalid_urls = [url for url in urls if not self.is_direct_pdf_url(url)]
+        
+        if invalid_urls:
+            logger.warning(f"Skipping {len(invalid_urls)} invalid URLs: {invalid_urls}")
+        
+        if not valid_urls:
+            return {
+                'total_provided': len(urls),
+                'valid_urls': 0,
+                'invalid_urls': len(invalid_urls),
+                'successful_downloads': 0,
+                'failed_downloads': 0,
+                'skipped_files': 0,
+                'results': []
+            }
+        
+        # Download valid URLs
+        result = await self.download_multiple_direct_pdfs(valid_urls)
+        result['total_provided'] = len(urls)
+        result['valid_urls'] = len(valid_urls)
+        result['invalid_urls'] = len(invalid_urls)
+        
+        return result
+
+
+# Convenience function for external use
+async def download_direct_pdfs(pdf_urls: List[str], config_path: str = "config.json") -> Dict:
+    """
+    Standalone function to download direct PDF URLs
+    
+    Args:
+        pdf_urls: List of direct PDF URLs
+        config_path: Path to configuration file
+        
+    Returns:
+        Dict with download results
+    """
+    async with AdvancedPeraturanScraper(config_path=config_path) as scraper:
+        return await scraper.download_from_direct_urls(pdf_urls)
+
 
 # Main function for testing
 async def main():
-    """Main function for testing the scraper with new features"""
+    """Main function for testing the scraper with new direct URL features"""
     
     async with AdvancedPeraturanScraper() as scraper:
         print("=== Advanced Indonesian Legal Documents Scraper ===")
@@ -590,7 +1013,43 @@ async def main():
         print("2. Organized folder structure: /Peraturan-RI/{TYPE}/{YEAR}/Nomor {X}/")
         print("3. Only downloads active (Berlaku) regulations")
         print("4. Uses specific search URL format for peraturan.go.id")
+        print("5. **NEW**: Direct PDF URL support for links like https://peraturan.go.id/files/uu-no-1-tahun-2025.pdf")
         print()
+        
+        # NEW: Example of direct PDF URL downloads
+        print("=== NEW FEATURE: Direct PDF URL Downloads ===")
+        
+        # Test URLs (these are examples - may not exist)
+        test_direct_urls = [
+            "https://peraturan.go.id/files/uud-no-1-tahun-2025.pdf",
+            "https://peraturan.go.id/files/uu-no-2-tahun-2024.pdf",
+            "https://peraturan.go.id/files/pp-no-15-tahun-2024.pdf"
+        ]
+        
+        print(f"Testing direct URL downloads with {len(test_direct_urls)} URLs...")
+        direct_result = await scraper.download_from_direct_urls(test_direct_urls)
+        print(f"Direct URL results: {json.dumps(direct_result, indent=2, ensure_ascii=False)}")
+        print()
+        
+        # Test individual direct URL download
+        print("Testing individual direct URL download...")
+        single_url = "https://peraturan.go.id/files/uu-no-1-tahun-2025.pdf"
+        if scraper.is_direct_pdf_url(single_url):
+            print(f"✓ URL validated as direct PDF: {single_url}")
+            filename = scraper.extract_filename_from_url(single_url)
+            print(f"✓ Extracted filename: {filename}")
+            reg_info = scraper.parse_regulation_info_from_url(single_url)
+            print(f"✓ Parsed regulation info: {reg_info}")
+            
+            # Try download
+            single_result = await scraper.download_direct_pdf(single_url)
+            print(f"Single download result: {json.dumps(single_result, indent=2, ensure_ascii=False)}")
+        else:
+            print(f"✗ URL not recognized as direct PDF: {single_url}")
+        print()
+        
+        # Original examples (search-based)
+        print("=== Original Search-Based Examples ===")
         
         # Example 1: Scrape specific UU for 2024
         print("Example 1: Scraping UU (Undang-Undang) for 2024...")
@@ -615,18 +1074,37 @@ async def main():
         print(f"UU No. 1/2024 results: {json.dumps(result2, indent=2, ensure_ascii=False)}")
         print()
         
-        # Example 3: Comprehensive scrape (commented out for demo)
-        # print("Example 3: Comprehensive scrape of all active regulations...")
-        # comprehensive_result = await scraper.scrape_all_active_regulations(
-        #     years=["2023", "2024"],
-        #     regulation_types=["UU", "PP"],
-        #     max_results_per_search=3
-        # )
-        # print(f"Comprehensive results summary: Downloaded {comprehensive_result['total_downloaded']} files")
+        # Example 3: Using direct URLs in scrape_regulations method
+        print("Example 3: Using direct URLs in scrape_regulations method...")
+        result3 = await scraper.scrape_regulations(
+            direct_urls=test_direct_urls
+        )
+        print(f"Direct URLs via scrape_regulations: {json.dumps(result3, indent=2, ensure_ascii=False)}")
+        print()
         
         # Show final statistics
         stats = scraper.get_stats()
         print(f"Final statistics: {json.dumps(stats, indent=2, ensure_ascii=False)}")
+        
+        # Show usage examples
+        print("\n=== Usage Examples for Direct URLs ===")
+        print("1. Download single direct URL:")
+        print("   result = await scraper.download_direct_pdf('https://peraturan.go.id/files/uu-no-1-tahun-2025.pdf')")
+        print()
+        print("2. Download multiple direct URLs:")
+        print("   urls = ['https://peraturan.go.id/files/uu-no-1-tahun-2025.pdf', 'https://peraturan.go.id/files/pp-no-2-tahun-2024.pdf']")
+        print("   result = await scraper.download_from_direct_urls(urls)")
+        print()
+        print("3. Use direct URLs in main scrape method:")
+        print("   result = await scraper.scrape_regulations(direct_urls=urls)")
+        print()
+        print("4. Standalone function:")
+        print("   result = await download_direct_pdfs(urls)")
+        print()
+        print("Supported URL formats:")
+        for url in test_direct_urls:
+            print(f"   ✓ {url}")
+        
         
 
 if __name__ == "__main__":
